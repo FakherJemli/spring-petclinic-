@@ -48,7 +48,7 @@ jobs:
           restore-keys: |
             dependency-check-nvd-
       - name: OWASP Dependency Check
-        # DevOpsGen: audit-grace-period-until: 2026-11-29
+        # DevOpsGen: audit-grace-period-until: 2026-11-30
         # Tip: add an NVD_API_KEY repo secret (nvd.nist.gov/developers/request-an-api-key)
         # to avoid slow/rate-limited NVD downloads on the first (uncached) run.
         run: mvn -B org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 -DdataDirectory=./.dependency-check-data -DnvdApiKey=${{ secrets.NVD_API_KEY }}
@@ -148,11 +148,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # GHCR requires all-lowercase image names
+      # GHCR requires all-lowercase names, and a Docker reference component
+      # may only contain [a-z0-9._-] and must start AND end alphanumeric.
+      # Lowercasing alone is not enough: a repository called e.g.
+      # "spring-petclinic-" produced "ghcr.io/owner/spring-petclinic-", which
+      # buildx rejects with "invalid reference format" before it builds
+      # anything. Strip the invalid characters instead of failing the run.
       - name: Normalise image name
         id: img
         run: |
-          echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          slug=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9._/-]+#-#g; s#(^|/)[._-]+#\1#g; s#[._-]+(/|$)#\1#g')
+          echo "name=ghcr.io/$slug" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
